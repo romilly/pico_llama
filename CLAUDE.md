@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Port of Karpathy's **llama2.c** to run LLaMA-2 inference on a **Pimoroni Pico Plus 2W** (RP2350B, dual Cortex-M33 @ 150 MHz, 8 MB PSRAM, 16 MB flash). The primary target model is `stories260K` (~1 MB weights, fits in PSRAM).
+Port of Karpathy's **llama2.c** to run LLaMA-2 inference on a **Pimoroni Pico Plus 2W** (RP2350B, dual Cortex-M33 @ 150 MHz, 8 MB PSRAM, 16 MB flash).
 
 The project briefing is in `pico-llm-briefing.md` — read it for hardware details, memory layout, PSRAM init, and implementation strategy.
+
+### Models
+
+| Model | dim | layers | heads | kv_heads | context | params | .bin size (fp32) |
+|---|---|---|---|---|---|---|---|
+| **stories260K** | 64 | 5 | 8 | 4 | 512 | 260K | ~1 MB |
+| stories15M | 288 | 6 | 6 | 6 | 256 | 15M | ~58 MB |
+
+- **stories260K** (done) — fits in PSRAM as fp32. Uses custom 512-token vocab (`tok512.bin`). Running at 19 tok/s.
+- **stories15M** (next) — too large for PSRAM as fp32. Requires int8 quantisation (~15 MB) via llama2.c's `runq.c` variant. Use `stories15M_q80.bin` or quantise via the repo's export tooling. Estimated 2–10 tok/s depending on PSRAM bandwidth.
 
 ## Build System
 
@@ -64,6 +74,7 @@ while true; do cat /dev/ttyACM0 2>/dev/null; sleep 0.1; done
 
 ## Key References
 
-- Source being ported: https://github.com/karpathy/llama2.c (`run.c`)
+- Source being ported: https://github.com/karpathy/llama2.c (`run.c` for fp32, `runq.c` for int8 quantised)
+- Model downloads: https://huggingface.co/karpathy/tinyllamas
 - PSRAM init reference: https://github.com/tjko/fanpico/blob/main/src/psram.c
 - RP2350 datasheet (QMI/PSRAM in chapter 12.14): https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf

@@ -102,6 +102,17 @@ The original `run.c` assumes a desktop environment with filesystem, `mmap`, `mal
 |--------------|------------|------------------------|
 | stories260K  | 19         | Single core, 150 MHz   |
 
+## Roadmap
+
+The next target is **stories15M** (~15M parameters). At ~58 MB in fp32 it won't fit in 8 MB PSRAM, so it needs int8 quantisation (~15 MB) using llama2.c's `runq.c` quantised inference variant. This requires:
+
+1. Obtain or generate `stories15M_q80.bin` (int8 quantised weights)
+2. Port `runq.c` quantised matmul and dequantisation to the Pico
+3. Adjust static buffer sizes for the larger model dimensions (dim=288, hidden_dim=768, 6 layers, 6 heads)
+4. KV cache may need to spill to PSRAM (SRAM budget is tight at 520 KB)
+
+Expected performance: **2-10 tok/s** depending on PSRAM bandwidth utilisation.
+
 ## License
 
 GPL-3.0 -- see [LICENSE](LICENSE).
