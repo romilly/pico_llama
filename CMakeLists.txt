@@ -11,11 +11,16 @@ pico_sdk_init()
 add_executable(pico_llama
     main.c
     psram.c
+    transformer.c
+    tokenizer.c
+    sampler.c
+    generate.c
 )
 
 target_link_libraries(pico_llama
     pico_stdlib
     pico_cyw43_arch_none
+    pico_time
     hardware_gpio
     hardware_clocks
 )

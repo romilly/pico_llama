@@ -5,27 +5,20 @@
 #include "pico/time.h"
 #include "psram.h"
 #include "model_data.h"
+#include "transformer.h"
+#include "tokenizer.h"
+#include "sampler.h"
+#include "generate.h"
 
-/* LLaMA-2 model config header: 7 x int32 */
-typedef struct {
-    int dim;
-    int hidden_dim;
-    int n_layers;
-    int n_heads;
-    int n_kv_heads;
-    int vocab_size;
-    int seq_len;
-} Config;
+static Transformer transformer;
+static Tokenizer tokenizer;
+static Sampler sampler;
 
-static int model_rc = -1;
-static Config model_config = { 0 };
-
-static void load_model(void) {
+static int load_model_to_psram(void) {
     size_t psram_avail = psram_size();
     if (psram_avail == 0) {
         printf("Model: No PSRAM, cannot load.\n");
-        model_rc = -1;
-        return;
+        return -1;
     }
 
     printf("Model: Copying %u bytes from flash to PSRAM...\n",
@@ -34,8 +27,7 @@ static void load_model(void) {
     if (models_stories260K_bin_len > psram_avail) {
         printf("Model: Too large for PSRAM! (%u > %u)\n",
                (unsigned)models_stories260K_bin_len, (unsigned)psram_avail);
-        model_rc = -2;
-        return;
+        return -2;
     }
 
     absolute_time_t t0 = get_absolute_time();
@@ -45,25 +37,7 @@ static void load_model(void) {
     printf("Model: Copy done in %lld ms (%.1f MB/s)\n",
            copy_us / 1000, (double)models_stories260K_bin_len / copy_us);
 
-    /* Parse config header from PSRAM */
-    memcpy(&model_config, (void *)PSRAM_BASE, sizeof(Config));
-
-    printf("Model: dim=%d, hidden_dim=%d, n_layers=%d, n_heads=%d, "
-           "n_kv_heads=%d, vocab_size=%d, seq_len=%d\n",
-           model_config.dim, model_config.hidden_dim,
-           model_config.n_layers, model_config.n_heads,
-           model_config.n_kv_heads, model_config.vocab_size,
-           model_config.seq_len);
-
-    /* Sanity check */
-    if (model_config.dim == 64 && model_config.n_layers == 5 &&
-        model_config.vocab_size == 512) {
-        printf("Model: Header looks correct!\n");
-        model_rc = 0;
-    } else {
-        printf("Model: WARNING — header values unexpected\n");
-        model_rc = -3;
-    }
+    return 0;
 }
 
 int main(void) {
@@ -84,20 +58,40 @@ int main(void) {
         printf("PSRAM: Init OK — %u MB\n", (unsigned)(psram_size() >> 20));
     } else {
         printf("PSRAM: Init failed (rc=%d)\n", psram_rc);
+        return 1;
     }
 
-    /* Load model weights into PSRAM */
-    load_model();
+    /* Copy model weights to PSRAM */
+    if (load_model_to_psram() != 0) {
+        printf("Failed to load model to PSRAM\n");
+        return 1;
+    }
 
-    printf("\n=== Running ===\n");
-    int count = 0;
+    /* Init transformer (maps weights from PSRAM, sets up RunState in SRAM) */
+    if (init_transformer(&transformer) != 0) {
+        printf("Failed to init transformer\n");
+        return 1;
+    }
+
+    /* Init tokenizer from embedded flash data */
+    if (init_tokenizer(&tokenizer, transformer.config.vocab_size) != 0) {
+        printf("Failed to init tokenizer\n");
+        return 1;
+    }
+
+    /* Init sampler: temperature=1.0, topp=0.9, seed from timer */
+    unsigned long long rng_seed = (unsigned long long)time_us_64();
+    init_sampler(&sampler, transformer.config.vocab_size, 1.0f, 0.9f, rng_seed);
+
+    printf("\n=== Generating ===\n\n");
+
+    /* Generate a story */
+    generate(&transformer, &tokenizer, &sampler, "Once upon a time", 256);
+
+    /* Blink LED to show we're alive */
+    printf("\n=== Done — blinking LED ===\n");
     while (1) {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        printf("tick %d | PSRAM: %u MB rc=%d | Model: rc=%d dim=%d layers=%d vocab=%d\n",
-               count++,
-               (unsigned)(psram_size() >> 20), psram_rc,
-               model_rc, model_config.dim, model_config.n_layers,
-               model_config.vocab_size);
         sleep_ms(500);
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
         sleep_ms(500);
