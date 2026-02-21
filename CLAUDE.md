@@ -20,15 +20,32 @@ This is a C project using the **Pico SDK 2.x** and CMake. The board identifier i
 
 ### Build Commands
 
+**Important:** `PICO_SDK_PATH` must be set before running cmake. On this machine:
+
 ```bash
+export PICO_SDK_PATH=/home/romilly/pico-sdk
 mkdir -p build && cd build
 cmake -DPICO_BOARD=pimoroni_pico_plus2_w_rp2350 ..
 make -j$(nproc)
 ```
 
+If the build directory already exists with a valid `CMakeCache.txt`, you can skip the `cmake` step and just run `make -j$(nproc)` from `build/`.
+
 ### Flashing
 
-Hold BOOT button while plugging in USB-C. Copy the `.uf2` file from `build/` to the mounted USB mass storage device.
+Hold BOOT button while plugging in USB-C. Copy the `.uf2` file from `build/` to the mounted USB mass storage device:
+
+```bash
+cp build/pico_llama.uf2 /media/$USER/RP2350/
+```
+
+### Monitoring Serial Output
+
+Watch USB CDC serial output (reconnects automatically on reboot):
+
+```bash
+while true; do cat /dev/ttyACM0 2>/dev/null; sleep 0.1; done
+```
 
 ## Architecture
 
